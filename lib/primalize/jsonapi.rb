@@ -203,8 +203,6 @@ module Primalize
         end
 
         def call
-          puts "#{self.class}#call"
-
           super.tap do |value|
             if @meta
               value[:meta] = @meta
