@@ -21,7 +21,7 @@ Or install it yourself as:
 ## Usage
 
 ```ruby
-class OrderSerializer < Primalize::JSONAPI
+class OrderSerializer < Primalize::JSONAPI[Order]
   # Notice we no longer need the `id` field. It is assumed.
   attributes(
     customer_name: string,

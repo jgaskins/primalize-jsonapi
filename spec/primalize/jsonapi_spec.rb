@@ -28,7 +28,7 @@ class User < Model
   attributes :id, :name
 end
 
-class MovieSerializer < Primalize::JSONAPI[]
+class MovieSerializer < Primalize::JSONAPI[Movie]
   attributes name: string, release_year: optional(integer)
 
   has_many(:actors) { ActorSerializer }
@@ -36,15 +36,15 @@ class MovieSerializer < Primalize::JSONAPI[]
   has_one(:movie_type) { MovieTypeSerializer }
 end
 
-class ActorSerializer < Primalize::JSONAPI[]
+class ActorSerializer < Primalize::JSONAPI[Actor]
   attributes name: string, email: string
 end
 
-class UserSerializer < Primalize::JSONAPI[]
+class UserSerializer < Primalize::JSONAPI[User]
   attributes name: string
 end
 
-class MovieTypeSerializer < Primalize::JSONAPI[]
+class MovieTypeSerializer < Primalize::JSONAPI[MovieType]
   attributes name: string
 end
 
@@ -146,6 +146,21 @@ module Primalize
             attributes: { name: 'Science Fiction' },
           ),
         )
+      end
+    end
+
+    describe 'declaration' do
+      let(:klass) { Class.new }
+      let(:serializer_class) { JSONAPI[klass] }
+
+      it 'does a thing' do
+        expect(JSONAPI[klass]).to be serializer_class
+      end
+
+      it 'sets inherited class as default serializer' do
+        new_class = Class.new(serializer_class)
+
+        expect(JSONAPI[klass]).to be new_class
       end
     end
   end

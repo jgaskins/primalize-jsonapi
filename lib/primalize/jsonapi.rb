@@ -119,8 +119,31 @@ module Primalize
       end
     end
 
-    def self.[] *args
-      Class.new(Single) do
+    @serializer_map = {}
+
+    def self.[]= model_class, serializer
+      @serializer_map[model_class] = serializer
+    end
+
+    def self.[] model_class=nil, **options
+      @serializer_map[model_class] ||= Class.new(Single) do
+        @model_class = model_class
+
+        # This is useful for situations like this:
+        #   class MySerializer < Primalize::JSONAPI[MyModel]
+        #   end
+        define_singleton_method :inherited do |inheriting_class|
+          JSONAPI[model_class] = inheriting_class
+        end
+
+        def self.model_class
+          if @model_class
+            @model_class
+          else
+            superclass.model_class
+          end
+        end
+
         def self.model_primalizer
           @model_primalizer ||= Class.new(Single) do
             def self.attributes **attrs
