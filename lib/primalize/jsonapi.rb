@@ -100,9 +100,7 @@ module Primalize
       def initialize
         # Three-layer cache: metadata/serialization, class, and id
         @cache = Hash.new do |h, k|
-          puts "Creating type hash: #{k}"
           h[k] = Hash.new do |h, k|
-            puts "Creating model hash: #{k}"
             h[k] = {}
           end
         end
