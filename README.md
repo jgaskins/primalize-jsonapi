@@ -1,6 +1,6 @@
 # Primalize::JSONAPI
 
-This is a JSON-API adapter for the [`primalize` gem](https://github.com/jgaskins/primalize). It aims to provide some level of compatibility with the JSON-API spec while still allowing for the type checking of Primalize.
+This is a JSON-API adapter for the [`primalize` gem](https://github.com/jgaskins/primalize), which provides type-checked serializers for Ruby web APIs. It aims to provide some level of compatibility with the JSON-API spec while still allowing for the type checking of Primalize.
 
 ## Installation
 
@@ -45,6 +45,11 @@ class OrderSerializer < Primalize::JSONAPI[Order]
   has_many(:line_items) { LineItemSerializer }
   has_one(:customer) { CustomerSerializer }
 end
+```
+
+## Performance
+
+Even with type checking, performance is still [over 12x](https://github.com/Netflix/fast_jsonapi/pull/42#issuecomment-364693269) that of `ActiveModel::Serializers`. Netflix's `fast_jsonapi` is faster, but doesn't provide type the type safety of Primalize.
 
 ## Development
 
