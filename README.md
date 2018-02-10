@@ -40,7 +40,7 @@ class OrderSerializer < Primalize::JSONAPI[Order]
   )
 
   # Associations are similar to other serialization gems, but you need to
-  # specify the serializer. There is no runtime inference. We do it inside
+  # specify the serializer. There is no runtime inference yet. We do it inside
   # a block in case it has not been loaded yet.
   has_many(:line_items) { LineItemSerializer }
   has_one(:customer) { CustomerSerializer }
