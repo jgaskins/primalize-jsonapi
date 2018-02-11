@@ -153,11 +153,11 @@ module Primalize
       let(:klass) { Class.new }
       let(:serializer_class) { JSONAPI[klass] }
 
-      it 'does a thing' do
+      it 'sets the default primalizer' do
         expect(JSONAPI[klass]).to be serializer_class
       end
 
-      it 'sets inherited class as default serializer' do
+      it 'sets inherited class as default primalizer' do
         new_class = Class.new(serializer_class)
 
         expect(JSONAPI[klass]).to be new_class
