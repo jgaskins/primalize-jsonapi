@@ -119,7 +119,7 @@ module Primalize
 
       it 'serializes included associations' do
         serializer = MovieSerializer.new(movie, include: %i(actors movie_type))
-        pp result = serializer.call
+        result = serializer.call
 
         expect(result[:data]).to eq([serialized_model])
         expect(result[:included].count).to eq 3
