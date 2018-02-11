@@ -145,13 +145,25 @@ module Primalize
         end
 
         def self.model_primalizer
+          original_primalizer = self
+
           @model_primalizer ||= Class.new(Single) do
             def self.attributes **attrs
               attribute_primalizer.attributes attrs
             end
 
-            def self.attribute_primalizer
+            define_singleton_method :to_s do
+              "#{original_primalizer}.model_primalizer"
+            end
+            define_singleton_method(:name) { to_s }
+
+            define_singleton_method :attribute_primalizer do
               @attribute_primalizer ||= Class.new(Single) do
+                define_singleton_method :to_s do
+                  "#{original_primalizer}.model_primalizer.attribute_primalizer"
+                end
+
+                define_singleton_method(:name) { to_s }
               end
             end
 
