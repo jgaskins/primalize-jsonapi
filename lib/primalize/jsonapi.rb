@@ -107,14 +107,20 @@ module Primalize
       end
 
       def [] type, model
+        return if model.nil?
+
         @cache[type][model.class][model.id]
       end
 
       def []= type, model, value
+        return if model.nil?
+
         @cache[type][model.class][model.id] = value
       end
 
       def fetch type, model
+        return if model.nil?
+
         @cache[type][model.class][model.id] ||= yield
       end
     end

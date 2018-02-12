@@ -147,6 +147,20 @@ module Primalize
           ),
         )
       end
+
+      it 'allows for nil has_one associations' do
+        movie = self.movie.update(owner: nil)
+        serializer = MovieSerializer.new(movie, include: %i(owner))
+        result = serializer.call
+
+        expect(result[:data]).to eq([
+          serialized_model.merge(
+            relationships: serialized_model[:relationships].merge(
+              owner: nil,
+            ),
+          ),
+        ])
+      end
     end
 
     describe 'declaration' do
