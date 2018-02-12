@@ -4,6 +4,10 @@ require 'primalize/many'
 
 module Primalize
   module JSONAPI
+    def self.model_type model
+      model.class.name.gsub(/(.)([A-Z])/, '\1_\2').downcase
+    end
+
     class Relationships
       def initialize
         @rels = []
@@ -92,7 +96,7 @@ module Primalize
       attributes(id: string(&:to_s), type: string)
 
       def type
-        object.class.name.gsub(/(.)([A-Z])/, '\1_\2').downcase
+        JSONAPI.model_type(object)
       end
     end
 
@@ -204,7 +208,7 @@ module Primalize
             end
 
             def type
-              object.class.name.gsub(/(.)([A-Z])/, '\1_\2').downcase
+              JSONAPI.model_type(object)
             end
 
             def attributes
