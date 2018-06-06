@@ -1,4 +1,9 @@
 require "bundler/setup"
+
+GC.disable
+
+start = Time.now
+at_exit { puts "Specs ran in #{(Time.now - start) * 1000}ms" }
 require "primalize/jsonapi"
 
 RSpec.configure do |config|
