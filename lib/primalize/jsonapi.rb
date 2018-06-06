@@ -174,6 +174,25 @@ module Primalize
 
             define_singleton_method :attribute_primalizer do
               @attribute_primalizer ||= Class.new(Single) do
+                def initialize model, original:
+                  super model
+                  @original = original
+                end
+
+                def self.attributes(**attrs)
+                  super
+
+                  attrs.each do |attr, type|
+                    define_method attr do
+                      if @original.respond_to? attr
+                        @original.public_send attr
+                      else
+                        object.public_send attr
+                      end
+                    end
+                  end
+                end
+
                 define_singleton_method :to_s do
                   "#{original_primalizer}.model_primalizer.attribute_primalizer"
                 end
@@ -203,8 +222,9 @@ module Primalize
 
             attr_reader :cache
 
-            def initialize model, cache: Cache.new
+            def initialize model, original:, cache: Cache.new
               super model
+              @original = original
               @cache = cache
             end
 
@@ -213,7 +233,7 @@ module Primalize
             end
 
             def attributes
-              self.class.attribute_primalizer.new(object).call
+              self.class.attribute_primalizer.new(object, original: @original).call
             end
 
             def relationships
@@ -283,7 +303,7 @@ module Primalize
 
         def data
           object.map do |model|
-            self.class.model_primalizer.new(model, cache: cache).call
+            self.class.model_primalizer.new(model, original: self, cache: cache).call
           end
         end
       end

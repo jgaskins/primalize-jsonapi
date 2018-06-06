@@ -29,11 +29,15 @@ class User < Model
 end
 
 class MovieSerializer < Primalize::JSONAPI[:movies]
-  attributes name: string, release_year: optional(integer)
+  attributes name: string, release_year: optional(integer), actor_count: integer
 
   has_many(:actors)
   has_one(:owner, type: :users)
   has_one(:movie_type, type: :movie_types)
+
+  def actor_count
+    13
+  end
 end
 
 class ActorSerializer < Primalize::JSONAPI[:actors]
@@ -82,6 +86,7 @@ module Primalize
           attributes: { # AttributePrimalizer
             name: 'Back to the Future',
             release_year: 1985,
+            actor_count: 13, # virtual attribute defined on the primalizer
           },
           relationships: {
             actors: {
