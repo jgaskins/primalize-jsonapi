@@ -88,16 +88,6 @@ module Primalize
             release_year: 1985,
             actor_count: 13, # virtual attribute defined on the primalizer
           },
-          relationships: {
-            actors: {
-              data: [
-                { id: '1', type: 'actors' },
-                { id: '2', type: 'actors' },
-              ],
-            },
-            owner: { data: { id: '1', type: 'users' } },
-            movie_type: { data: { id: '1', type: 'movie_types' } },
-          },
         }
       end
 
@@ -118,7 +108,18 @@ module Primalize
         serializer = MovieSerializer.new(movie, include: %i(actors movie_type))
         result = serializer.call
 
-        expect(result[:data]).to eq([serialized_model])
+        expect(result[:data]).to eq([serialized_model.merge(
+          relationships: {
+            actors: {
+              data: [
+                { id: '1', type: 'actors' },
+                { id: '2', type: 'actors' },
+              ],
+            },
+            owner: { data: { id: '1', type: 'users' } },
+            movie_type: { data: { id: '1', type: 'movie_types' } },
+          },
+        )])
         expect(result[:included].count).to eq 3
         expect(result[:included]).to include(
           hash_including(

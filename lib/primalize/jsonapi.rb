@@ -217,14 +217,15 @@ module Primalize
               id: string(&:to_s),
               type: string,
               attributes: object,
-              relationships: object,
+              relationships: optional(object),
             )
 
             attr_reader :cache
 
-            def initialize model, original:, cache: Cache.new
+            def initialize model, original:, include: [], cache: Cache.new
               super model
               @original = original
+              @include = include
               @cache = cache
             end
 
@@ -236,8 +237,14 @@ module Primalize
               self.class.attribute_primalizer.new(object, original: @original).call
             end
 
+            def call
+              super.tap(&:compact!)
+            end
+
             def relationships
-              self.class.relationships.metadata object, cache: cache
+              if @include&.any?
+                self.class.relationships.metadata object, cache: cache
+              end
             end
           end
         end
@@ -303,7 +310,7 @@ module Primalize
 
         def data
           object.map do |model|
-            self.class.model_primalizer.new(model, original: self, cache: cache).call
+            self.class.model_primalizer.new(model, original: self, include: @include, cache: cache).call
           end
         end
       end
