@@ -1,12 +1,10 @@
 require 'primalize/jsonapi/version'
 require 'primalize/single'
-require 'primalize/many'
 
 module Primalize
   module JSONAPI
-    def self.model_type model
-      model.class.name.gsub(/(.)([A-Z])/, '\1_\2').downcase
-    end
+    @model_type_cache = {}
+    @serializer_map = {}
 
     class Relationships
       def initialize
@@ -38,9 +36,9 @@ module Primalize
 
     class HasMany
       attr_reader :attr
-      def initialize attr, &block
+      def initialize attr, type: attr, &block
         @attr = attr
-        @block = block
+        @block = block || proc { JSONAPI.fetch(type) }
       end
 
       def call(model, cache:)
@@ -58,7 +56,7 @@ module Primalize
       def metadata(model, cache:)
         result = model.send(@attr).map do |obj|
           cache.fetch(:metadata, obj) do
-            MetadataPrimalizer.new(obj).call
+            MetadataPrimalizer.new(obj, primalizer.type).call
           end
         end
 
@@ -68,9 +66,9 @@ module Primalize
 
     class HasOne
       attr_reader :attr
-      def initialize attr, &block
+      def initialize attr, type: attr, &block
         @attr = attr
-        @block = block
+        @block = block || proc { JSONAPI.fetch(type) }
       end
 
       def call(model, cache:)
@@ -87,7 +85,7 @@ module Primalize
       def metadata(model, cache:)
         model = model.send(@attr)
         cache.fetch(:metadata, model) do
-          { data: MetadataPrimalizer.new(model).call }
+          { data: MetadataPrimalizer.new(model, primalizer.type).call }
         end
       end
     end
@@ -95,8 +93,11 @@ module Primalize
     class MetadataPrimalizer < Single
       attributes(id: string(&:to_s), type: string)
 
-      def type
-        JSONAPI.model_type(object)
+      attr_reader :type
+
+      def initialize model, type
+        super model
+        @type = type.to_s
       end
     end
 
@@ -129,28 +130,32 @@ module Primalize
       end
     end
 
-    @serializer_map = {}
-
-    def self.[]= model_class, serializer
-      @serializer_map[model_class] = serializer
+    def self.[]= type, serializer
+      @serializer_map[type] = serializer
     end
 
-    def self.[] model_class=nil, **options
-      @serializer_map[model_class] ||= Class.new(Single) do
-        @model_class = model_class
+    def self.fetch type
+      @serializer_map.fetch type do
+        raise ArgumentError, "No Primalize::JSONAPI primalizer defined for #{type.inspect}"
+      end
+    end
+
+    def self.[] type=nil, **options
+      @serializer_map[type] ||= Class.new(Single) do
+        @_type = type
 
         # This is useful for situations like this:
-        #   class MySerializer < Primalize::JSONAPI[MyModel]
+        #   class MySerializer < Primalize::JSONAPI[:movies]
         #   end
         define_singleton_method :inherited do |inheriting_class|
-          JSONAPI[model_class] = inheriting_class
+          JSONAPI[type] = inheriting_class
         end
 
-        def self.model_class
-          if @model_class
-            @model_class
+        def self.type
+          if @_type
+            @_type
           else
-            superclass.model_class
+            superclass.type
           end
         end
 
@@ -199,16 +204,12 @@ module Primalize
             attr_reader :cache
 
             def initialize model, cache: Cache.new
-              super(model)
+              super model
               @cache = cache
             end
 
-            def self.name
-              'ModelPrimalizer'
-            end
-
-            def type
-              JSONAPI.model_type(object)
+            define_method :type do
+              original_primalizer.type.to_s
             end
 
             def attributes

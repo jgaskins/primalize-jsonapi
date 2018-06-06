@@ -28,23 +28,23 @@ class User < Model
   attributes :id, :name
 end
 
-class MovieSerializer < Primalize::JSONAPI[Movie]
+class MovieSerializer < Primalize::JSONAPI[:movies]
   attributes name: string, release_year: optional(integer)
 
-  has_many(:actors) { ActorSerializer }
-  has_one(:owner) { UserSerializer }
-  has_one(:movie_type) { MovieTypeSerializer }
+  has_many(:actors)
+  has_one(:owner, type: :users)
+  has_one(:movie_type, type: :movie_types)
 end
 
-class ActorSerializer < Primalize::JSONAPI[Actor]
+class ActorSerializer < Primalize::JSONAPI[:actors]
   attributes name: string, email: string
 end
 
-class UserSerializer < Primalize::JSONAPI[User]
+class UserSerializer < Primalize::JSONAPI[:users]
   attributes name: string
 end
 
-class MovieTypeSerializer < Primalize::JSONAPI[MovieType]
+class MovieTypeSerializer < Primalize::JSONAPI[:movie_types]
   attributes name: string
 end
 
@@ -61,16 +61,8 @@ module Primalize
           name: 'Back to the Future',
           release_year: 1985,
           actors: [
-            Actor.new(
-              id: 1,
-              name: 'Michael J. Fox',
-              email: 'michaeljfox@hollywood.com',
-            ),
-            Actor.new(
-              id: 2,
-              name: 'Christopher Lloyd',
-              email: 'docbrown@hollywood.com',
-            ),
+            Actor.new(id: 1, name: 'Michael J. Fox', email: 'michaeljfox@hollywood.com'),
+            Actor.new(id: 2, name: 'Christopher Lloyd', email: 'docbrown@hollywood.com'),
           ],
           owner: User.new(
             id: 1,
@@ -86,7 +78,7 @@ module Primalize
       let(:serialized_model) do
         { # ModelPrimalizer
           id: '1',
-          type: 'movie',
+          type: 'movies',
           attributes: { # AttributePrimalizer
             name: 'Back to the Future',
             release_year: 1985,
@@ -94,12 +86,12 @@ module Primalize
           relationships: {
             actors: {
               data: [
-                { id: '1', type: 'actor' },
-                { id: '2', type: 'actor' },
+                { id: '1', type: 'actors' },
+                { id: '2', type: 'actors' },
               ],
             },
-            owner: { data: { id: '1', type: 'user' } },
-            movie_type: { data: { id: '1', type: 'movie_type' } },
+            owner: { data: { id: '1', type: 'users' } },
+            movie_type: { data: { id: '1', type: 'movie_types' } },
           },
         }
       end
@@ -126,7 +118,7 @@ module Primalize
         expect(result[:included]).to include(
           hash_including(
             id: '1',
-            type: 'actor',
+            type: 'actors',
             attributes: {
               name: 'Michael J. Fox',
               email: 'michaeljfox@hollywood.com',
@@ -134,7 +126,7 @@ module Primalize
           ),
           hash_including(
             id: '2',
-            type: 'actor',
+            type: 'actors',
             attributes: {
               name: 'Christopher Lloyd',
               email: 'docbrown@hollywood.com',
@@ -142,7 +134,7 @@ module Primalize
           ),
           hash_including(
             id: '1',
-            type: 'movie_type',
+            type: 'movie_types',
             attributes: { name: 'Science Fiction' },
           ),
         )
