@@ -136,7 +136,8 @@ module Primalize
 
     def self.fetch type
       @serializer_map.fetch type do
-        raise ArgumentError, "No Primalize::JSONAPI primalizer defined for #{type.inspect}"
+        raise ArgumentError,
+          "No Primalize::JSONAPI primalizer defined for #{type.inspect}"
       end
     end
 
