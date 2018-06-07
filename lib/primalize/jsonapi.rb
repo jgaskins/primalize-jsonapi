@@ -6,6 +6,29 @@ module Primalize
     @model_type_cache = {}
     @serializer_map = {}
 
+    def self.serialize include: [], **models
+      if models.one?
+        type = models.each_key.first
+        cache = Cache.new
+        Array(models[type])
+          .map { |model| self[type].new(model, include: include, cache: cache).call }
+          .reduce({ data: [] }) { |result, hash|
+            result.merge!(hash) do |key, left, right|
+              case key
+              when :data
+                left + right
+              when :included
+                (left + right).tap(&:uniq!)
+              else
+                left.merge!(right)
+              end
+            end
+          }
+      else
+        raise ArgumentError, "cannot supply more than one resource type"
+      end
+    end
+
     class Relationships
       def initialize
         @rels = []
@@ -186,7 +209,7 @@ module Primalize
                   attrs.each do |attr, type|
                     define_method attr do
                       if @original.respond_to? attr
-                        @original.public_send attr
+                        @original.class.new(object).public_send attr
                       else
                         object.public_send attr
                       end
@@ -267,7 +290,7 @@ module Primalize
         attr_reader :cache
 
         def initialize models, include: [], meta: nil, cache: Cache.new
-          super Array(models)
+          super models
 
           @include = include
           @meta = meta
@@ -284,7 +307,7 @@ module Primalize
               included = Set.new
 
               @include.each do |rel|
-                object.each do |model|
+                Array(object).each do |model|
                   primalizer = self.class.model_primalizer.relationships[rel]
                   relationship = primalizer.call(model, cache: cache)
 
@@ -310,7 +333,7 @@ module Primalize
         end
 
         def data
-          object.map do |model|
+          Array(object).map do |model|
             self.class.model_primalizer.new(model, original: self, include: @include, cache: cache).call
           end
         end

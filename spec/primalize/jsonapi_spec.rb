@@ -14,6 +14,12 @@ class Movie < Model
     :owner,
     :movie_type,
   )
+
+  def initialize **attrs
+    super
+
+    @actors ||= []
+  end
 end
 
 class Actor < Model
@@ -35,8 +41,10 @@ class MovieSerializer < Primalize::JSONAPI[:movies]
   has_one(:owner, type: :users)
   has_one(:movie_type, type: :movie_types)
 
+  alias movie object
+
   def actor_count
-    13
+    movie.actors.count
   end
 end
 
@@ -86,7 +94,7 @@ module Primalize
           attributes: { # AttributePrimalizer
             name: 'Back to the Future',
             release_year: 1985,
-            actor_count: 13, # virtual attribute defined on the primalizer
+            actor_count: 2, # virtual attribute defined on the primalizer
           },
         }
       end
@@ -104,75 +112,97 @@ module Primalize
         )
       end
 
-      it 'serializes included associations' do
-        serializer = MovieSerializer.new(movie, include: %i(actors movie_type))
-        result = serializer.call
-
-        expect(result[:data]).to eq([serialized_model.merge(
-          relationships: {
-            actors: {
-              data: [
-                { id: '1', type: 'actors' },
-                { id: '2', type: 'actors' },
-              ],
+      context 'with associations' do
+        let(:serialized_model) do
+          super().merge(
+            relationships: {
+              actors: {
+                data: [
+                  { id: '1', type: 'actors' },
+                  { id: '2', type: 'actors' },
+                ],
+              },
+              owner: { data: { id: '1', type: 'users' } },
+              movie_type: { data: { id: '1', type: 'movie_types' } },
             },
-            owner: { data: { id: '1', type: 'users' } },
-            movie_type: { data: { id: '1', type: 'movie_types' } },
-          },
-        )])
-        expect(result[:included].count).to eq 3
-        expect(result[:included]).to include(
-          hash_including(
-            id: '1',
-            type: 'actors',
-            attributes: {
-              name: 'Michael J. Fox',
-              email: 'michaeljfox@hollywood.com',
-            },
-          ),
-          hash_including(
-            id: '2',
-            type: 'actors',
-            attributes: {
-              name: 'Christopher Lloyd',
-              email: 'docbrown@hollywood.com',
-            },
-          ),
-          hash_including(
-            id: '1',
-            type: 'movie_types',
-            attributes: { name: 'Science Fiction' },
-          ),
-        )
-      end
+          )
+        end
 
-      it 'allows for nil has_one associations' do
-        movie = self.movie.update(owner: nil)
-        serializer = MovieSerializer.new(movie, include: %i(owner))
-        result = serializer.call
+        it 'serializes included associations' do
+          serializer = MovieSerializer.new(movie, include: %i(actors movie_type))
+          result = serializer.call
 
-        expect(result[:data]).to eq([
-          serialized_model.merge(
-            relationships: serialized_model[:relationships].merge(
-              owner: nil,
+          expect(result[:data]).to eq([serialized_model])
+          expect(result[:included].count).to eq 3
+          expect(result[:included]).to include(
+            hash_including(
+              id: '1',
+              type: 'actors',
+              attributes: {
+                name: 'Michael J. Fox',
+                email: 'michaeljfox@hollywood.com',
+              },
             ),
-          ),
-        ])
+            hash_including(
+              id: '2',
+              type: 'actors',
+              attributes: {
+                name: 'Christopher Lloyd',
+                email: 'docbrown@hollywood.com',
+              },
+            ),
+            hash_including(
+              id: '1',
+              type: 'movie_types',
+              attributes: { name: 'Science Fiction' },
+            ),
+          )
+        end
+
+        it 'allows for nil has_one associations' do
+          movie = self.movie.update(owner: nil)
+          serializer = MovieSerializer.new(movie, include: %i(owner))
+          result = serializer.call
+
+          expect(result[:data]).to eq([
+            serialized_model.merge(
+              relationships: serialized_model[:relationships].merge(
+                owner: nil,
+              ),
+            ),
+          ])
+        end
+      end
+    end
+
+    context 'with multiple models' do
+      it do
+        # attributes name: string, release_year: optional(integer), actor_count: integer
+        expect(JSONAPI.serialize(movies: [
+          Movie.new(id: 1, name: 'Back to the Future', release_year: 1985),
+          Movie.new(id: 2, name: 'Back to the Future Part II', release_year: 1987),
+          Movie.new(id: 3, name: 'Back to the Future Part III', release_year: 1991),
+        ])).to eq(
+          data: [
+            { id: '1', type: 'movies', attributes: { name: 'Back to the Future', release_year: 1985, actor_count: 0 } },
+            { id: '2', type: 'movies', attributes: { name: 'Back to the Future Part II', release_year: 1987, actor_count: 0 } },
+            { id: '3', type: 'movies', attributes: { name: 'Back to the Future Part III', release_year: 1991, actor_count: 0 } },
+          ],
+        )
       end
     end
 
     describe 'declaration' do
-      let(:klass) { Class.new }
-      let(:serializer_class) { JSONAPI[klass] }
+      let(:serializer_class) { JSONAPI[:foo] }
 
       it 'sets the default primalizer' do
-        expect(JSONAPI[klass]).to be serializer_class
+        expect(JSONAPI[:foo]).to be serializer_class
       end
 
       it 'sets inherited class as default primalizer' do
         new_class = Class.new(serializer_class)
 
-        expect(JSONAPI[klass]).to be new_class
+        expect(JSONAPI[:foo]).to be new_class
       end
     end
   end
