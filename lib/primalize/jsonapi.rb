@@ -107,9 +107,11 @@ module Primalize
 
       def metadata(model, cache:)
         model = model.send(@attr)
-        cache.fetch(:metadata, model) do
-          { data: MetadataPrimalizer.new(model, primalizer.type).call }
+        data = cache.fetch(:metadata, model) do
+          MetadataPrimalizer.new(model, primalizer.type).call
         end
+
+        { data: data }
       end
     end
 
@@ -266,9 +268,7 @@ module Primalize
             end
 
             def relationships
-              if @include&.any?
-                self.class.relationships.metadata object, cache: cache
-              end
+              self.class.relationships.metadata object, cache: cache
             end
           end
         end

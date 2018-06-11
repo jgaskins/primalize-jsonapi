@@ -96,6 +96,16 @@ module Primalize
             release_year: 1985,
             actor_count: 2, # virtual attribute defined on the primalizer
           },
+          relationships: {
+            actors: {
+              data: [
+                { id: '1', type: 'actors' },
+                { id: '2', type: 'actors' },
+              ],
+            },
+            owner: { data: { id: '1', type: 'users' } },
+            movie_type: { data: { id: '1', type: 'movie_types' } },
+          },
         }
       end
 
@@ -113,21 +123,6 @@ module Primalize
       end
 
       context 'with associations' do
-        let(:serialized_model) do
-          super().merge(
-            relationships: {
-              actors: {
-                data: [
-                  { id: '1', type: 'actors' },
-                  { id: '2', type: 'actors' },
-                ],
-              },
-              owner: { data: { id: '1', type: 'users' } },
-              movie_type: { data: { id: '1', type: 'movie_types' } },
-            },
-          )
-        end
-
         it 'serializes included associations' do
           serializer = MovieSerializer.new(movie, include: %i(actors movie_type))
           result = serializer.call
@@ -167,7 +162,7 @@ module Primalize
           expect(result[:data]).to eq([
             serialized_model.merge(
               relationships: serialized_model[:relationships].merge(
-                owner: nil,
+                owner: { data: nil },
               ),
             ),
           ])
@@ -184,9 +179,48 @@ module Primalize
           Movie.new(id: 3, name: 'Back to the Future Part III', release_year: 1991),
         ])).to eq(
           data: [
-            { id: '1', type: 'movies', attributes: { name: 'Back to the Future', release_year: 1985, actor_count: 0 } },
-            { id: '2', type: 'movies', attributes: { name: 'Back to the Future Part II', release_year: 1987, actor_count: 0 } },
-            { id: '3', type: 'movies', attributes: { name: 'Back to the Future Part III', release_year: 1991, actor_count: 0 } },
+            {
+              id: '1',
+              type: 'movies',
+              attributes: {
+                name: 'Back to the Future',
+                release_year: 1985,
+                actor_count: 0,
+              },
+              relationships: {
+                actors: { data: [] },
+                owner: { data: nil },
+                movie_type: { data: nil },
+              },
+            },
+            {
+              id: '2',
+              type: 'movies',
+              attributes: {
+                name: 'Back to the Future Part II',
+                release_year: 1987,
+                actor_count: 0,
+              },
+              relationships: {
+                actors: { data: [] },
+                owner: { data: nil },
+                movie_type: { data: nil },
+              },
+            },
+            {
+              id: '3',
+              type: 'movies',
+              attributes: {
+                name: 'Back to the Future Part III',
+                release_year: 1991,
+                actor_count: 0,
+              },
+              relationships: {
+                actors: { data: [] },
+                owner: { data: nil },
+                movie_type: { data: nil },
+              },
+            },
           ],
         )
       end
