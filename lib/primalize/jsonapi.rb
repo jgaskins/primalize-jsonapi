@@ -1,342 +1,201 @@
 require 'primalize/jsonapi/version'
 require 'primalize/single'
+require 'primalize/many'
 
 module Primalize
   module JSONAPI
-    @model_type_cache = {}
     @serializer_map = {}
 
-    def self.serialize include: [], **models
-      if models.one?
-        type = models.each_key.first
-        cache = Cache.new
-        Array(models[type])
-          .map { |model| self[type].new(model, include: include, cache: cache).call }
-          .reduce({ data: [] }) { |result, hash|
-            result.merge!(hash) do |key, left, right|
-              case key
-              when :data
-                left + right
-              when :included
-                (left + right).tap(&:uniq!)
-              else
-                left.merge!(right)
-              end
-            end
+    def self.serialize(include: [], meta: nil, **attrs)
+      type, models = attrs.first
+
+      self[type].new(models, include: include, meta: meta).call
+    end
+
+    def self.[] key
+      @serializer_map[key] ||= Class.new(Serializer) do
+        define_singleton_method :inherited do |klass|
+          super klass
+
+          JSONAPI.module_exec do
+            @serializer_map[key] = klass
+          end
+
+          %i(
+            AttributesSerializer
+            RelationshipsSerializer
+            MetadataSerializer
+          ).each do |serializer|
+            klass.const_set serializer, Class.new(Serializer.const_get(serializer))
+          end
+
+          klass.const_set :HasOne, Class.new(Serializer::HasOne) {
+            attributes data: klass::MetadataSerializer
           }
-      else
-        raise ArgumentError, "cannot supply more than one resource type"
-      end
-    end
+          klass.const_set :HasOneOptional, Class.new(Serializer::HasOneOptional) {
+            attributes data: optional(klass::MetadataSerializer)
+          }
+          klass.const_set :HasMany, Class.new(Serializer::HasMany) {
+            attributes data: enumerable(klass::MetadataSerializer)
+          }
 
-    class Relationships
-      def initialize
-        @rels = []
-        @map = {}
-      end
-
-      def << rel
-        @rels << rel
-        @map[rel.attr] = rel
-      end
-
-      def [] rel
-        @map[rel]
-      end
-
-      def metadata(model, cache:)
-        @rels.each_with_object({}) do |rel, hash|
-          hash[rel.attr] = rel.metadata(model, cache: cache)
-        end
-      end
-
-      def call(model, cache:)
-        @rels.each_with_object({}) do |rel, hash|
-          hash[rel.attr] = rel.call(model)
-        end
-      end
-    end
-
-    class HasMany
-      attr_reader :attr
-      def initialize attr, type: attr, &block
-        @attr = attr
-        @block = block || proc { JSONAPI.fetch(type) }
-      end
-
-      def call(model, cache:)
-        model.send(@attr).map do |obj|
-          cache.fetch(:serialization, obj) do
-            primalizer.new(obj).call
-          end
-        end
-      end
-
-      def primalizer
-        @primalizer ||= @block.call
-      end
-
-      def metadata(model, cache:)
-        result = model.send(@attr).map do |obj|
-          cache.fetch(:metadata, obj) do
-            MetadataPrimalizer.new(obj, primalizer.type).call
-          end
-        end
-
-        { data: result }
-      end
-    end
-
-    class HasOne
-      attr_reader :attr
-      def initialize attr, type: attr, &block
-        @attr = attr
-        @block = block || proc { JSONAPI.fetch(type) }
-      end
-
-      def call(model, cache:)
-        model = model.send(@attr)
-        cache.fetch(:serialization, model) do
-          primalizer.new(model).call
-        end
-      end
-
-      def primalizer
-        @primalizer ||= @block.call
-      end
-
-      def metadata(model, cache:)
-        model = model.send(@attr)
-        data = cache.fetch(:metadata, model) do
-          MetadataPrimalizer.new(model, primalizer.type).call
-        end
-
-        { data: data }
-      end
-    end
-
-    class MetadataPrimalizer < Single
-      attributes(id: string(&:to_s), type: string)
-
-      attr_reader :type
-
-      def initialize model, type
-        super model
-        @type = type.to_s
-      end
-    end
-
-    class Cache
-      def initialize
-        # Three-layer cache: metadata/serialization, class, and id
-        @cache = Hash.new do |h, k|
-          h[k] = Hash.new do |h, k|
-            h[k] = {}
-          end
-        end
-      end
-
-      def [] type, model
-        return if model.nil?
-
-        @cache[type][model.class][model.id]
-      end
-
-      def []= type, model, value
-        return if model.nil?
-
-        @cache[type][model.class][model.id] = value
-      end
-
-      def fetch type, model
-        return if model.nil?
-
-        @cache[type][model.class][model.id] ||= yield
-      end
-    end
-
-    def self.[]= type, serializer
-      @serializer_map[type] = serializer
-    end
-
-    def self.fetch type
-      @serializer_map.fetch type do
-        raise ArgumentError,
-          "No Primalize::JSONAPI primalizer defined for #{type.inspect}"
-      end
-    end
-
-    def self.[] type=nil, **options
-      @serializer_map[type] ||= Class.new(Single) do
-        @_type = type
-
-        # This is useful for situations like this:
-        #   class MySerializer < Primalize::JSONAPI[:movies]
-        #   end
-        define_singleton_method :inherited do |inheriting_class|
-          JSONAPI[type] = inheriting_class
-        end
-
-        def self.type
-          if @_type
-            @_type
-          else
-            superclass.type
-          end
-        end
-
-        def self.model_primalizer
-          original_primalizer = self
-
-          @model_primalizer ||= Class.new(Single) do
-            def self.attributes **attrs
-              attribute_primalizer.attributes attrs
-            end
-
-            define_singleton_method :to_s do
-              "#{original_primalizer}.model_primalizer"
-            end
-            define_singleton_method(:name) { to_s }
-
-            define_singleton_method :attribute_primalizer do
-              @attribute_primalizer ||= Class.new(Single) do
-                def initialize model, original:
-                  super model
-                  @original = original
-                end
-
-                def self.attributes(**attrs)
-                  super
-
-                  attrs.each do |attr, type|
-                    define_method attr do
-                      if @original.respond_to? attr
-                        @original.class.new(object).public_send attr
-                      else
-                        object.public_send attr
-                      end
-                    end
-                  end
-                end
-
-                define_singleton_method :to_s do
-                  "#{original_primalizer}.model_primalizer.attribute_primalizer"
-                end
-
-                define_singleton_method(:name) { to_s }
-              end
-            end
-
-            def self.relationships
-              @relationships ||= Relationships.new
-            end
-
-            def self.has_many *args, &block
-              relationships << HasMany.new(*args, &block)
-            end
-
-            def self.has_one *args, &block
-              relationships << HasOne.new(*args, &block)
-            end
-
-            _attributes(
-              id: string(&:to_s),
-              type: string,
-              attributes: object,
-              relationships: optional(object),
+          klass.const_set :ModelSerializer, Class.new(Serializer::ModelSerializer) {
+            attributes(
+              attributes: primalize(klass::AttributesSerializer),
+              relationships: primalize(klass::RelationshipsSerializer),
             )
 
-            attr_reader :cache
-
-            def initialize model, original:, include: [], cache: Cache.new
-              super model
-              @original = original
-              @include = include
-              @cache = cache
+            define_method :attributes do
+              klass::AttributesSerializer.new(object).call
             end
 
-            define_method :type do
-              original_primalizer.type.to_s
-            end
-
-            def attributes
-              self.class.attribute_primalizer.new(object, original: @original).call
-            end
-
-            def call
-              super.tap(&:compact!)
-            end
-
-            def relationships
-              self.class.relationships.metadata object, cache: cache
-            end
-          end
-        end
-
-        def self.attributes **attrs
-          model_primalizer.attributes attrs
-        end
-
-        _attributes data: array(primalize(model_primalizer))
-
-        def self.has_many *args, &block
-          model_primalizer.has_many *args, &block
-        end
-
-        def self.has_one *args, &block
-          model_primalizer.has_one *args, &block
-        end
-
-        attr_reader :cache
-
-        def initialize models, include: [], meta: nil, cache: Cache.new
-          super models
-
-          @include = include
-          @meta = meta
-          @cache = cache
-        end
-
-        def call
-          super.tap do |value|
-            if @meta
-              value[:meta] = @meta
-            end
-
-            unless @include.to_a.empty?
-              included = Set.new
-
-              @include.each do |rel|
-                Array(object).each do |model|
-                  primalizer = self.class.model_primalizer.relationships[rel]
-                  relationship = primalizer.call(model, cache: cache)
-
-                  case relationship
-                  when Array
-                    relationship.each do |object|
-                      object[:data].each do |data|
-                        data.delete :relationships
-                        included << data
-                      end
-                    end
-                  when Hash
-                    data = relationship[:data].first
-                    data.delete :relationships
-                    included << data
-                  end
-                end
+            define_method :relationships do
+              attrs = klass::RelationshipsSerializer.attributes.each_with_object({}) do |(attr, _), hash|
+                hash[attr] = { data: object.send(attr) }
               end
 
-              value[:included] = included.to_a
+              klass::RelationshipsSerializer.new(attrs).call
+            end
+          }
+          klass.const_set :DataSerializer, Class.new(Serializer::DataSerializer) {
+            attributes(
+              data: enumerable(klass::ModelSerializer),
+            )
+          }
+          klass::MetadataSerializer.type = key
+          klass::ModelSerializer.type = key
+
+          def klass.method_added method_name
+            klass = self
+            self::AttributesSerializer.define_method method_name do |*args|
+              klass.new(object).send(method_name, *args)
             end
           end
         end
+      end
+    end
 
-        def data
-          Array(object).map do |model|
-            self.class.model_primalizer.new(model, original: self, include: @include, cache: cache).call
-          end
+    class Serializer
+      include Single::Type
+
+      class << self
+        extend Forwardable
+        delegate %i(string integer number array optional any object enum) => Single
+
+        attr_writer :association_type_map
+
+        def association_type_map
+          @association_type_map ||= {}
         end
+      end
+
+      def self.attributes **attrs
+        self::AttributesSerializer.attributes **attrs
+      end
+
+      def self.has_many association, type: association
+        association_type_map[association] = type
+
+        self::RelationshipsSerializer.attributes(
+          association => DeferredAssociation.new(
+            type: type,
+            association_type: :HasMany,
+          )
+        )
+      end
+
+      def self.has_one association, type: association, optional: true
+        association_type_map[association] = type
+
+        self::RelationshipsSerializer.attributes(
+          association => DeferredAssociation.new(
+            type: type,
+            association_type: optional ? :HasOneOptional : :HasOne,
+          )
+        )
+      end
+
+      class DeferredAssociation
+        def initialize type:, association_type:
+          @type = type
+          @association_type = association_type
+        end
+
+        def new(*args)
+          Primalize::JSONAPI[@type].const_get(@association_type).new(*args)
+        end
+      end
+
+      attr_reader :object
+
+      def initialize object, include: [], meta: nil
+        @object = object
+        @include = include
+        @meta = meta
+      end
+
+      def call
+        objects = Array(@object).uniq
+        result = self.class::DataSerializer
+          .new(data: objects)
+          .call
+
+        result.merge!(meta: @meta) if @meta
+
+        if Array(@include).any?
+          result.merge!(included: @include.flat_map { |assoc|
+            objects
+              .map { |obj| obj.send(assoc) }
+              .uniq
+              .flat_map { |value|
+                JSONAPI[self.class.association_type_map[assoc]]
+                  .new(value)
+                  .call[:data]
+              }
+          })
+        end
+
+        result
+      end
+
+      class AttributesSerializer < Single
+      end
+
+      class RelationshipsSerializer < Many
+      end
+
+      class MetadataSerializer < Single
+        attributes(
+          id: string(&:to_s),
+          type: string,
+        )
+
+        def type
+          self.class.type.to_s
+        end
+
+        class << self
+          attr_accessor :type
+        end
+
+        def self.inspect
+          "MetadataSerializer(#{type.inspect})"
+        end
+      end
+
+      class ModelSerializer < MetadataSerializer
+      end
+
+      class DataSerializer < Many
+      end
+
+      class HasMany < Many
+      end
+
+      class HasOne < Many
+      end
+
+      class HasOneOptional < Many
       end
     end
   end
